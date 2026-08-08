@@ -16,15 +16,19 @@
   commit ? false,
   skip-prompt ? false,
   order ? null,
+  nixpkgsPath ? null,
+  nurPath ? ./.,
 }:
 
 let
   system = builtins.currentSystem or "x86_64-linux";
-  nixpkgsSrc = fetchTarball {
-    url = "https://github.com/NixOS/nixpkgs/archive/nixpkgs-unstable.tar.gz";
-  };
+  nixpkgsSrc =
+    if nixpkgsPath != null then nixpkgsPath
+    else fetchTarball {
+      url = "https://github.com/NixOS/nixpkgs/archive/nixpkgs-unstable.tar.gz";
+    };
   nixpkgs = import nixpkgsSrc { inherit system; config.allowUnfree = true; };
-  pkgs = import ./default.nix { pkgs = nixpkgs; };
+  pkgs = import (nurPath + "/default.nix") { pkgs = nixpkgs; };
 
   inherit (nixpkgs) lib;
 
