@@ -137,7 +137,7 @@ let
     else if path != null then
       packagesWithUpdateScript path pkgs
     else
-      throw "No arguments provided.\n\n${helpText}";
+      packagesWithUpdateScriptMatchingPredicate (_path: _pkg: true) pkgs;
 
   helpText = ''
     Please run:
