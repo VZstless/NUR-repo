@@ -1,7 +1,7 @@
 /*
   To run:
 
-      nix-shell update.nix
+      nix-shell update.nix --argstr package runmat
 
   See https://nixos.org/manual/nixpkgs/unstable/#var-passthru-updateScript
 */
@@ -20,12 +20,13 @@
 
 let
   system = builtins.currentSystem or "x86_64-linux";
-  nixpkgs = import (fetchTarball {
+  nixpkgsSrc = fetchTarball {
     url = "https://github.com/NixOS/nixpkgs/archive/nixpkgs-unstable.tar.gz";
-  }) { inherit system; config.allowUnfree = true; };
+  };
+  nixpkgs = import nixpkgsSrc { inherit system; config.allowUnfree = true; };
   pkgs = import ./default.nix { pkgs = nixpkgs; };
 
-  inherit (pkgs) lib;
+  inherit (nixpkgs) lib;
 
   # Remove duplicate elements from the list based on some extracted value. O(n^2) complexity.
   nubOn =
@@ -61,11 +62,7 @@ let
             { package, attrPath }:
             {
               updateScript = (get-script package);
-              # Some updaters use the same `updateScript` value for all packages.
-              # Also compare `meta.description`.
               position = package.meta.position or null;
-              # We cannot always use `meta.position` since it might not be available
-              # or it might be shared among multiple packages.
             };
 
           dedupResults = lst: nubOn somewhatUniqueRepresentant (lib.concatLists lst);
@@ -80,7 +77,6 @@ let
               package = evaluatedPathContent;
             }
           else if lib.isAttrs evaluatedPathContent then
-            # If user explicitly points to an attrSet or it is marked for recursion, we recur.
             if
               path == rootPath
               || evaluatedPathContent.recurseForDerivations or false
@@ -98,14 +94,11 @@ let
     in
     packagesWithPathInner rootPath pkgs;
 
-  # Recursively find all packages (derivations) in `pkgs` matching `cond` predicate.
   packagesWith = packagesWithPath [ ];
 
-  # Recursively find all packages in `pkgs` with updateScript matching given predicate.
   packagesWithUpdateScriptMatchingPredicate =
     cond: packagesWith (path: pkg: (get-script pkg != null) && cond path pkg);
 
-  # Recursively find all packages under `path` in `pkgs` with updateScript.
   packagesWithUpdateScript =
     path: pkgs:
     let
@@ -117,7 +110,6 @@ let
     else
       packagesWithPath prefix (path: pkg: (get-script pkg != null)) pathContent;
 
-  # Find a package under `path` in `pkgs` and require that it has an updateScript.
   packageByName =
     path: pkgs:
     let
@@ -133,7 +125,6 @@ let
         inherit package;
       };
 
-  # List of packages matched based on the CLI arguments.
   packages =
     if package != null then
       [ (packageByName package pkgs) ]
@@ -178,7 +169,7 @@ let
 
         --arg skip-prompt true
 
-    By default, the updater will update the packages in arbitrary order. Alternately, you can force a specific order based on the packages’ dependency relations:
+    By default, the updater will update the packages in arbitrary order. Alternately, you can force a specific order based on the packages' dependency relations:
 
         - Reverse topological order (e.g. {"gnome-text-editor", "gimp"}, {"gtk3", "gtk4"}, {"glib"}) is useful when you want checkout each commit one by one to build each package individually but some of the packages to be updated would cause a mass rebuild for the others. Of course, this requires that none of the updated dependents require a new version of the dependency.
 
@@ -191,7 +182,6 @@ let
     Note that sorting requires instantiating each package and then querying Nix store for requisites so it will be pretty slow with large number of packages.
   '';
 
-  # Transform a matched package into an object for update.py.
   packageData =
     { package, attrPath }:
     let
@@ -206,11 +196,8 @@ let
       attrPath = updateScript.attrPath or attrPath;
     };
 
-  # JSON file with data for update.py.
   packagesJson = nixpkgs.writeText "packages.json" (builtins.toJSON (map packageData packages));
 
-  # Allow boolean arguments to be provided with either --arg or --argstr.
-  # The ability to use the string "true" will be deprecated.
   isTrue = arg: arg == true || arg == "true";
 
   optionalArgs =
@@ -223,7 +210,25 @@ let
   args = [ packagesJson ] ++ optionalArgs;
 
 in
-nixpkgs.writeShellScriptBin "update" ''
-  export PATH="${nixpkgs.lib.makeBinPath [ nixpkgs.git nixpkgs.nix nixpkgs.cacert ]}:$PATH"
-  exec ${nixpkgs.python3.interpreter} ${./update.py} ${builtins.concatStringsSep " " args}
-''
+nixpkgs.stdenv.mkDerivation {
+  name = "nixpkgs-update-script";
+  buildCommand = ''
+    echo ""
+    echo "----------------------------------------------------------------"
+    echo ""
+    echo "Not possible to update packages using \`nix-build\`"
+    echo ""
+    echo "${helpText}"
+    echo "----------------------------------------------------------------"
+    exit 1
+  '';
+  shellHook = ''
+    unset shellHook
+    exec ${nixpkgs.python3.interpreter} ${nixpkgsSrc}/maintainers/scripts/update.py ${builtins.concatStringsSep " " args}
+  '';
+  nativeBuildInputs = [
+    nixpkgs.git
+    nixpkgs.nix
+    nixpkgs.cacert
+  ];
+}
