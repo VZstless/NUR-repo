@@ -17,10 +17,11 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-G0j2vJ2cnmj9TgZ9WHAq/3a7ZD269rLbNtxgm2WHKMs=";
   };
 
-  nativeBuildInputs = [ 
-    fuse 
-    pkg-config 
-  ];
+  nativeBuildInputs = [ pkg-config ];
+
+  # The default `fuse` output only ships the binaries; pkg-config and the
+  # headers live in `dev`, which propagates the `out` library output.
+  buildInputs = [ fuse.dev ];
 
   buildPhase = ''
     runHook preBuild
