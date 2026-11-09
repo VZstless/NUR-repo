@@ -4,6 +4,7 @@
   fetchFromGitHub,
   nix-update-script,
   cacert,
+  aws-lc,
   git,
   bash,
 }:
@@ -29,6 +30,10 @@ rustPlatform.buildRustPackage (finalAttrs: {
     substituteInPlace src/reviewer.rs \
       --replace-fail '#!/bin/bash' '#!${bash}/bin/bash'
   '';
+
+  buildInputs = [
+    aws-lc
+  ];
 
   # reqwest fails to build a client in the sandbox without a CA bundle
   # ("No CA certificates were loaded from the system"), which takes out the
