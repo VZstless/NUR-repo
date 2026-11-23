@@ -61,7 +61,7 @@ jobs:
     - name: Show disk space
       run: df -h /
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Install nix
       uses: cachix/install-nix-action@v31
       with:
